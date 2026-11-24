@@ -1,0 +1,138 @@
+=====================================================
+ SW학과 실습실 좌석 예약 시스템 - 설치 및 실행 명령어
+=====================================================
+
+[0] 폴더 구조 (이 구조 그대로 두어야 합니다)
+
+  lab-seat-reservation_lyb/
+   ├─ app.py
+   ├─ lab_system.db      (없으면 실행할 때 자동 생성)
+   └─ templates/
+       ├─ admin.html
+       ├─ change_password.html
+       ├─ index.html
+       ├─ login.html
+       └─ signup.html
+
+
+[1] 필요한 것
+  - Python 3.8 이상
+  - Flask (이것만 설치하면 됩니다. sqlite3 등은 Python에 포함)
+  - 휴대폰/다른 네트워크 접속이 필요할 때만: cloudflared
+
+
+[2] Python 확인
+
+  Windows:
+    python --version
+
+  macOS / Linux:
+    python3 --version
+
+
+[3] Flask 설치
+
+  Windows:
+    pip install flask
+
+  macOS / Linux:
+    pip3 install flask
+
+  (가상환경을 쓰고 싶다면)
+  Windows:
+    python -m venv venv
+    venv\Scripts\activate
+    pip install flask
+
+  macOS / Linux:
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install flask
+
+
+[4] 서버 실행
+
+  lab_system 폴더로 이동한 뒤 실행합니다.
+
+  Windows:
+    cd lab_system
+    python app.py
+
+  macOS / Linux:
+    cd lab_system
+    python3 app.py
+
+  실행되면 브라우저에서 아래 주소로 접속합니다.
+    같은 컴퓨터:   http://localhost:5000
+    같은 와이파이: http://[이 컴퓨터의 IP]:5000
+
+  종료: 터미널에서 Ctrl + C
+
+
+[5] 내 컴퓨터 IP 확인 (같은 와이파이의 휴대폰으로 접속할 때)
+
+  Windows:
+    ipconfig
+    -> "IPv4 주소" 확인
+
+  macOS:
+    ipconfig getifaddr en0
+
+  Linux:
+    hostname -I
+
+
+[6] 다른 네트워크의 휴대폰에서 접속 (cloudflared 터널)
+
+  (1) cloudflared 설치
+
+    Windows:
+      winget install --id Cloudflare.cloudflared
+
+    macOS:
+      brew install cloudflared
+
+  (2) 서버를 먼저 실행한 상태에서, 새 터미널을 열어 터널 실행
+
+      cloudflared tunnel --url http://localhost:5000
+
+  (3) 출력되는 주소를 확인합니다.
+      예) https://xxxx-xxxx-xxxx-xxxx.trycloudflare.com
+
+  (4) app.py 맨 위의 PUBLIC_TUNNEL_URL 값을 그 주소로 바꾸고,
+      서버를 다시 실행합니다. (관리자 화면의 모바일 접속 QR에 반영됩니다)
+
+      PUBLIC_TUNNEL_URL = "https://xxxx-xxxx-xxxx-xxxx.trycloudflare.com"  (또는 환경변수 PUBLIC_TUNNEL_URL)
+
+  주의: cloudflared를 다시 켤 때마다 주소가 바뀝니다.
+        그때마다 (3)~(4)를 반복해야 합니다.
+
+
+[7] 로그인 정보 (시연용 기본 계정)
+
+  관리자:  아이디 admin   / 비밀번호 admin1234
+  학생:    로그인 화면의 빠른 로그인 버튼 사용 (비밀번호 1234)
+  새 학생: 로그인 화면의 회원가입에서 7자리 학번으로 가입
+
+
+[8] 자주 생기는 문제
+
+  - "python"이 인식되지 않음
+      -> Windows는 python 대신 py 를 시도: py app.py
+  - "No module named flask"
+      -> pip install flask 를 다시 실행 (가상환경을 쓴다면 activate 후)
+  - 화면이 깨지거나 오류 페이지가 뜸
+      -> templates 폴더가 app.py와 같은 위치에 있는지 확인
+  - 포트 5000이 이미 사용 중
+      -> 다른 프로그램을 종료하거나, app.py 맨 아래의 port=5000 값을 변경
+  - 발표 전 데이터를 처음 상태로 되돌리고 싶을 때
+      -> 서버를 끄고 lab_system.db 파일을 삭제한 뒤 다시 실행 (새로 생성됨)
+
+
+[9] 참고
+
+  - 발표용 시연 버전이라 보안은 의도적으로 미뤄 두었습니다.
+    (평문 비밀번호, 기본 계정, 디버그 모드 켜짐)
+    실제 배포 전에는 보완이 필요합니다.
+  - 관리자 화면의 "시연 시계"로 시간대를 가상으로 바꿔 가며
+    예정/진행 중/종료 동작을 확인할 수 있습니다.

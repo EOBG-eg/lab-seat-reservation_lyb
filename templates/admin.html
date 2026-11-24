@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>관리자 관제 센터 - SW학과 실습실 시스템</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+  <header class="bg-slate-950 text-white px-6 py-4 flex flex-wrap justify-between items-center gap-4 border-b border-amber-500/40">
+    <div class="flex items-center gap-6">
+      <div>
+        <span class="text-[11px] bg-amber-500 text-slate-950 font-extrabold px-2 py-0.5 rounded">PROFESSOR & ADMIN</span>
+        <h1 class="text-lg font-bold mt-0.5">교수 · 조교 전용 실습실 이용 현황 및 로그 관제</h1>
+      </div>
+      <nav class="flex gap-2">
+        <a href="{{ url_for('index', slot_id=current_slot.id) }}" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-200">← 학생용 화면 보기</a>
+      </nav>
+    </div>
+    <div class="flex items-center gap-3 text-xs">
+      <span class="text-amber-300 font-bold">👨‍🏫 {{ session['user_name'] }} 권한 접속 중</span>
+      <a href="{{ url_for('change_password') }}" class="text-slate-300 hover:text-white underline">비밀번호 변경</a>
+      <a href="{{ url_for('logout') }}" class="bg-rose-600 text-white px-3 py-1.5 rounded-lg font-bold">로그아웃</a>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-6 space-y-6">
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}<div class="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold">{{ messages[0] }}</div>{% endif %}
+    {% endwith %}
+
+    <!-- 휴대폰 접속 주소 -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-4 text-xs">
+      <div id="mobileQr" data-url="{{ public_url }}" class="p-1.5 bg-white border rounded-lg shrink-0"></div>
+      <div class="min-w-0">
+        <p class="font-bold">📱 휴대폰 접속 주소</p>
+        <a href="{{ public_url }}" target="_blank" class="font-mono text-indigo-700 underline break-all">{{ public_url }}</a>
+        <p class="text-[11px] text-slate-500 mt-1">휴대폰으로 QR을 스캔하면 학생 화면이 열립니다. cloudflared를 다시 켜서 주소가 바뀌면 <span class="font-mono">app.py.py</span> 맨 위의 <span class="font-mono">PUBLIC_TUNNEL_URL</span> 값을 바꿔주세요.</p>
+      </div>
+    </div>
+
+    <!-- 시연용 시계 -->
+    <div class="bg-white border {% if clock.demo %}border-fuchsia-400{% else %}border-slate-200{% endif %} rounded-xl p-4 flex flex-wrap items-center gap-3 text-xs">
+      <span class="font-bold">🕐 앱 현재 시각 <span class="font-mono text-base {% if clock.demo %}text-fuchsia-700{% endif %}">{{ clock.now }}</span></span>
+      {% if clock.demo %}<span class="bg-fuchsia-100 text-fuchsia-800 font-bold px-2 py-0.5 rounded">시연용 시계 적용 중</span>{% else %}<span class="text-slate-400">실제 시각 사용 중</span>{% endif %}
+      <form method="POST" action="/admin/set_clock" class="flex items-center gap-2 ml-auto">
+        <input type="hidden" name="slot_id" value="{{ current_slot.id }}">
+        <input type="time" name="time" required class="border rounded-lg px-2 py-1 font-mono">
+        <button class="bg-slate-900 text-white font-bold px-3 py-1.5 rounded-lg">이 시각으로 맞춤</button>
+        <button name="mode" value="RESET" formnovalidate class="bg-slate-100 text-slate-700 font-bold px-3 py-1.5 rounded-lg">실제 시각으로</button>
+      </form>
+      <p class="w-full text-[11px] text-slate-500">시간대가 시작 전(예정) / 진행 중 / 종료인지에 따라 학생 화면의 버튼(예약·사용·반납)이 달라집니다. 시연·점검할 때 사용하세요. 서버를 다시 켜면 실제 시각으로 돌아옵니다.</p>
+    </div>
+
+    <!-- 시간대 선택 -->
+    <div class="flex flex-wrap gap-2">
+      {% for s in slots %}
+        {% set p = phase_of(s) %}
+        <a href="{{ url_for('admin_dashboard', slot_id=s.id) }}" class="px-4 py-2 rounded-xl border text-xs {% if s.id == current_slot.id %}border-amber-500 bg-amber-50 font-bold text-amber-900{% else %}bg-white border-slate-200 text-slate-600 hover:bg-slate-50{% endif %}">
+          <span class="font-mono">{{ s.time_range }}</span> · {{ s.title }}
+          <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded-full font-bold {% if p == 'active' %}bg-emerald-100 text-emerald-800{% elif p == 'future' %}bg-amber-100 text-amber-800{% else %}bg-slate-200 text-slate-500{% endif %}">{{ PHASE_LABEL[p] }}</span>
+        </a>
+      {% endfor %}
+    </div>
+
+    <!-- 현황 요약 -->
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
+      <div class="bg-emerald-50 p-4 rounded-xl shadow-sm border border-emerald-200"><span class="text-xs text-emerald-700 font-bold">✅ 사용중</span><p class="text-2xl font-extrabold text-emerald-700 mt-1">{{ counts.occupied }}석</p></div>
+      <div class="bg-amber-50 p-4 rounded-xl shadow-sm border border-amber-200"><span class="text-xs text-amber-700 font-bold">⏳ 예약중</span><p class="text-2xl font-extrabold text-amber-700 mt-1">{{ counts.reserved }}석</p></div>
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200"><span class="text-xs text-slate-500 font-bold">공석</span><p class="text-2xl font-extrabold mt-1">{{ counts.empty }}석</p></div>
+      <div class="bg-rose-50 p-4 rounded-xl shadow-sm border border-rose-200"><span class="text-xs text-rose-700 font-bold">⚠️ 주의사항 있는 PC</span><p class="text-2xl font-extrabold text-rose-700 mt-1">{{ counts.caution }}대</p></div>
+      <div class="bg-indigo-50 p-4 rounded-xl shadow-sm border border-indigo-200"><span class="text-xs text-indigo-700 font-bold">대기열</span><p class="text-2xl font-extrabold text-indigo-700 mt-1">{{ queue_count }}명</p></div>
+    </div>
+
+    <!-- PC 이용 상태 제어 -->
+    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+      <div class="flex flex-wrap justify-between items-center gap-2 mb-1">
+        <h2 class="text-sm font-bold">🖥 [{{ current_slot.time_range }}] PC 이용 상태 <span class="text-[11px] font-normal text-slate-500">({{ PHASE_LABEL[phase] }})</span></h2>
+        <span class="text-[11px] text-slate-400">좌석 상태가 바뀌면 자동으로 갱신됩니다.</span>
+      </div>
+      <p class="text-xs text-slate-500 mb-4"><b>회수</b>: 예약/사용 상태를 해제하고 대기열 1순위에게 자동 배정합니다. 해당 사용자에게 알림이 전달됩니다.</p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {% for seat in seats %}
+          <div class="border rounded-xl p-3 text-xs flex flex-col justify-between {% if seat.status == 'EMPTY' %}bg-slate-50{% elif seat.status == 'RESERVED' %}bg-amber-50 border-amber-400{% else %}bg-emerald-50 border-emerald-500{% endif %}">
+            <div>
+              <div class="flex justify-between items-center font-bold">
+                <span>{{ seat.seat_num }}</span>
+                {% if seat.status == 'RESERVED' %}<span class="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">예약중</span>
+                {% elif seat.status == 'OCCUPIED' %}<span class="text-[10px] bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded">사용중</span>{% endif %}
+              </div>
+              <p class="mt-1.5 font-semibold text-slate-800">{{ (seat.user_id ~ ' ' ~ seat.user_name) if seat.user_id else '공석' }}</p>
+              <p class="text-[10px] text-slate-500 mt-1 truncate">이력: {{ seat.last_user_info }}</p>
+              {% if seat.notes_total %}<p class="text-[10px] mt-1.5 bg-rose-100 text-rose-800 rounded px-1.5 py-1 font-bold">⚠️ 주의사항 {{ seat.notes_total }}건</p>{% endif %}
+            </div>
+            {% if seat.status != 'EMPTY' %}
+              <form method="POST" action="/seat_action" class="mt-2" onsubmit="return confirm('{{ seat.seat_num }} 이용 상태를 회수할까요? 사용자에게 알림이 전달됩니다.')">
+                <input type="hidden" name="slot_id" value="{{ current_slot.id }}"><input type="hidden" name="seat_id" value="{{ seat.id }}"><input type="hidden" name="from_page" value="admin">
+                <button name="action" value="FORCE_RELEASE" class="w-full py-1 bg-rose-600 text-white text-[11px] font-bold rounded">회수</button>
+              </form>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- 주의사항 관리 -->
+    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+      <h2 class="text-sm font-bold mb-1">📌 PC별 주의사항 <span class="text-[11px] font-normal text-slate-400">(전체 {{ all_notes|length }}건)</span></h2>
+      <p class="text-xs text-slate-500 mb-3">한 PC에 여러 사람이 남길 수 있습니다. 오래되었거나 부적절한 내용은 관리자가 삭제할 수 있습니다. (작성자는 본인 것만 삭제 가능)</p>
+      <div class="overflow-x-auto max-h-72 overflow-y-auto border rounded-lg">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-100 text-slate-700 sticky top-0"><tr><th class="p-2.5">PC</th><th class="p-2.5">작성자</th><th class="p-2.5">작성 시각</th><th class="p-2.5">경로</th><th class="p-2.5">내용</th><th class="p-2.5"></th></tr></thead>
+          <tbody class="divide-y">
+            {% for n in all_notes %}
+              <tr class="hover:bg-slate-50">
+                <td class="p-2.5 font-bold whitespace-nowrap">{{ n.seat_num }}</td>
+                <td class="p-2.5 whitespace-nowrap">{{ n.user_id }} {{ n.user_name }}</td>
+                <td class="p-2.5 font-mono text-slate-500 whitespace-nowrap">{{ n.created_at[:16] }}</td>
+                <td class="p-2.5 font-mono text-slate-600 break-all">{{ n.path or '-' }}</td>
+                <td class="p-2.5 text-slate-700 break-words">{{ n.message }}</td>
+                <td class="p-2.5">
+                  <form method="POST" action="/note/delete" onsubmit="return confirm('이 주의사항을 삭제할까요?')">
+                    <input type="hidden" name="note_id" value="{{ n.id }}"><input type="hidden" name="slot_id" value="{{ current_slot.id }}"><input type="hidden" name="from_page" value="admin">
+                    <button class="px-2 py-1 bg-rose-100 text-rose-700 font-bold rounded text-[11px]">삭제</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6" class="p-6 text-center text-slate-400">등록된 주의사항이 없습니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 감사 로그 -->
+    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+      <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+        <h2 class="text-sm font-bold">📋 이용 감사 로그 <span class="text-[11px] font-normal text-slate-400">(최근 100건)</span></h2>
+        <form method="GET" action="/admin" class="flex flex-wrap gap-2">
+          <input type="hidden" name="slot_id" value="{{ current_slot.id }}">
+          <div class="flex items-center gap-1 bg-slate-50 border rounded-lg p-1"><input type="date" name="start_date" value="{{ start_date }}" class="bg-transparent px-1 font-mono text-[10px]"><span class="text-[10px]">~</span><input type="date" name="end_date" value="{{ end_date }}" class="bg-transparent px-1 font-mono text-[10px]"></div>
+          <select name="action_filter" class="text-xs border rounded-lg px-2">
+            {% for value, label in [('ALL','전체'), ('좌석 예약','예약'), ('예약 취소','예약 취소'), ('사용 시작','사용 시작'), ('반납','반납'), ('강제 회수','강제 회수'), ('주의사항','주의사항 등록/삭제'), ('승격','대기열 승격'), ('예약 만료','예약 만료'), ('회원가입','회원가입'), ('비밀번호 변경','비밀번호 변경')] %}
+              <option value="{{ value }}" {% if action_filter == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <input type="text" name="keyword" value="{{ search_keyword }}" placeholder="학번/이름/PC/내용 검색..." class="text-xs border rounded-lg px-2 w-48">
+          <button type="submit" class="bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded-lg">검색</button>
+        </form>
+      </div>
+      <div class="overflow-x-auto max-h-96 overflow-y-auto border rounded-lg">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-100 text-slate-700 sticky top-0"><tr><th class="p-2.5">시각</th><th class="p-2.5">시간대</th><th class="p-2.5">PC</th><th class="p-2.5">이용자</th><th class="p-2.5">구분</th><th class="p-2.5">상세 내용</th></tr></thead>
+          <tbody class="divide-y">
+            {% for log in logs %}
+              <tr class="hover:bg-slate-50">
+                <td class="p-2.5 font-mono text-slate-500 whitespace-nowrap">{{ log.timestamp }}</td>
+                <td class="p-2.5 whitespace-nowrap">{{ log.slot_time }}</td>
+                <td class="p-2.5 font-bold">{{ log.seat_num }}</td>
+                <td class="p-2.5 whitespace-nowrap">{{ log.user_info }}</td>
+                <td class="p-2.5 font-bold whitespace-nowrap {% if log.action_type == '강제 회수' %}text-amber-700{% elif log.action_type in ('예약 만료', '시간 종료 자동 반납') %}text-slate-500{% elif log.action_type.startswith('주의사항') %}text-rose-600{% else %}text-indigo-700{% endif %}">{{ log.action_type }}</td>
+                <td class="p-2.5 text-slate-600 break-words">{{ log.memo }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6" class="p-6 text-center text-slate-400">검색된 로그가 없습니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    try { const qr = document.getElementById('mobileQr'); new QRCode(qr, { text: qr.dataset.url, width: 84, height: 84, correctLevel: QRCode.CorrectLevel.M }); } catch (e) {}
+  </script>
+  <script>
+    // 좌석/주의사항/시간대 상태가 바뀌면 새로고침. 검색 조건 입력 중(입력창 포커스)에는 새로고침하지 않음.
+    let lastSig = null;
+    async function pollSeats() {
+      try {
+        const res = await fetch('/api/slot_snapshot?slot_id={{ current_slot.id }}');
+        const sig = (await res.json()).signature;
+        const typing = ['INPUT', 'SELECT'].includes(document.activeElement && document.activeElement.tagName);
+        if (lastSig === null) lastSig = sig;
+        else if (lastSig !== sig && !typing) location.reload();
+      } catch (e) {}
+    }
+    setInterval(pollSeats, 3000); pollSeats();
+  </script>
+</body>
+</html>
